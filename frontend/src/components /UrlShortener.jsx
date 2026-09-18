@@ -8,7 +8,7 @@ function UrlShortener() {
 
     const handleShorten = async () => {
         if (!longUrl.trim()) {
-            setError("Please enter a URL");
+            setError("Please enter a URL.");
             return;
         }
 
@@ -23,55 +23,148 @@ function UrlShortener() {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    longUrl: longUrl,
+                    longUrl: longUrl.trim(),
                 }),
             });
 
             if (!response.ok) {
-                throw new Error("Failed to shorten URL");
+                throw new Error("Could not shorten URL");
             }
 
             const data = await response.json();
 
             setShortUrl(data.shortUrl);
-        } catch (err) {
-            console.error(err);
-            setError("Something went wrong. Make sure the backend is running.");
+        } catch (error) {
+            console.error(error);
+            setError(
+                "Could not shorten the URL. Make sure the backend is running."
+            );
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div>
-            <h1>URL Shortener</h1>
+        <div
+            style={{
+                minHeight: "100vh",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                background: "#f5f7fb",
+                fontFamily: "Arial, sans-serif",
+            }}
+        >
+            <div
+                style={{
+                    width: "500px",
+                    padding: "40px",
+                    background: "white",
+                    borderRadius: "15px",
+                    boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
+                }}
+            >
+                <h1
+                    style={{
+                        textAlign: "center",
+                        marginBottom: "10px",
+                    }}
+                >
+                    URL Shortener
+                </h1>
 
-            <input
-                type="text"
-                placeholder="Enter your long URL"
-                value={longUrl}
-                onChange={(e) => setLongUrl(e.target.value)}
-            />
+                <p
+                    style={{
+                        textAlign: "center",
+                        color: "#666",
+                        marginBottom: "30px",
+                    }}
+                >
+                    Turn your long URLs into short links
+                </p>
 
-            <button onClick={handleShorten} disabled={loading}>
-                {loading ? "Shortening..." : "Shorten URL"}
-            </button>
+                <input
+                    type="text"
+                    placeholder="Enter your long URL"
+                    value={longUrl}
+                    onChange={(e) => setLongUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            handleShorten();
+                        }
+                    }}
+                    style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        padding: "14px",
+                        fontSize: "16px",
+                        border: "1px solid #ccc",
+                        borderRadius: "8px",
+                        marginBottom: "15px",
+                    }}
+                />
 
-            {shortUrl && (
-                <div>
-                    <p>Your short URL:</p>
+                <button
+                    onClick={handleShorten}
+                    disabled={loading}
+                    style={{
+                        width: "100%",
+                        padding: "14px",
+                        fontSize: "16px",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: loading ? "not-allowed" : "pointer",
+                        background: "#111827",
+                        color: "white",
+                    }}
+                >
+                    {loading ? "Shortening..." : "Shorten URL"}
+                </button>
 
-                    <a
-                        href={shortUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                {error && (
+                    <p
+                        style={{
+                            color: "red",
+                            marginTop: "20px",
+                            textAlign: "center",
+                        }}
                     >
-                        {shortUrl}
-                    </a>
-                </div>
-            )}
+                        {error}
+                    </p>
+                )}
 
-            {error && <p>{error}</p>}
+                {shortUrl && (
+                    <div
+                        style={{
+                            marginTop: "30px",
+                            padding: "20px",
+                            background: "#f0fdf4",
+                            borderRadius: "10px",
+                        }}
+                    >
+                        <p
+                            style={{
+                                marginTop: 0,
+                                fontWeight: "bold",
+                            }}
+                        >
+                            Your short URL:
+                        </p>
+
+                        <a
+                            href={shortUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                                wordBreak: "break-all",
+                                fontSize: "16px",
+                            }}
+                        >
+                            {shortUrl}
+                        </a>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

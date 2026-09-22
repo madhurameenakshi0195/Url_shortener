@@ -5,6 +5,7 @@ function UrlShortener() {
     const [shortUrl, setShortUrl] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [stats, setStats] = useState(null);
 
     const handleShorten = async () => {
         if (!longUrl.trim()) {
@@ -15,6 +16,7 @@ function UrlShortener() {
         setLoading(true);
         setError("");
         setShortUrl("");
+        setStats(null);
 
         try {
             const response = await fetch("http://localhost:8080/api/urls", {
@@ -28,12 +30,28 @@ function UrlShortener() {
             });
 
             if (!response.ok) {
-                throw new Error("Could not shorten URL");
+                const errorText = await response.text();
+
+                console.log("Backend status:", response.status);
+                console.log("Backend error:", errorText);
+
+                throw new Error(errorText);
             }
 
             const data = await response.json();
 
             setShortUrl(data.shortUrl);
+
+            const shortCode = data.shortUrl.split("/").pop();
+
+            const statsResponse = await fetch(
+                `http://localhost:8080/api/urls/${shortCode}/stats`
+            );
+
+            if (statsResponse.ok) {
+                const statsData = await statsResponse.json();
+                setStats(statsData);
+            }
         } catch (error) {
             console.error(error);
             setError(
@@ -43,6 +61,7 @@ function UrlShortener() {
             setLoading(false);
         }
     };
+
 
     return (
         <div
@@ -162,6 +181,30 @@ function UrlShortener() {
                         >
                             {shortUrl}
                         </a>
+
+                        {stats && (
+                            <div
+                                style={{
+                                    marginTop: "20px",
+                                    paddingTop: "15px",
+                                    borderTop: "1px solid #ddd",
+                                }}
+                            >
+                                <p>
+                                    <strong>Clicks:</strong> {stats.clickCount}
+                                </p>
+
+                                <p>
+                                    <strong>Created:</strong>{" "}
+                                    {new Date(stats.createdAt).toLocaleString()}
+                                </p>
+
+                                <p>
+                                    <strong>Expires:</strong>{" "}
+                                    {new Date(stats.expiresAt).toLocaleString()}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

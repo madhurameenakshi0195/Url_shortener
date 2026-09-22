@@ -1,7 +1,9 @@
 package com.urlshortener.service;
 
 import com.urlshortener.dto.UrlRequest;
+import com.urlshortener.dto.UrlStatsResponse;
 import com.urlshortener.entity.ShortUrl;
+import com.urlshortener.exception.ShortUrlNotFoundException;
 import com.urlshortener.repository.UrlRepository;
 import com.urlshortener.util.Base62Encoder;
 import lombok.RequiredArgsConstructor;
@@ -15,17 +17,20 @@ public class UrlService {
 
     private final UrlRepository repository;
 
+
     public String createShortUrl(UrlRequest request) {
 
-        // save first to get ID
+        LocalDateTime now = LocalDateTime.now();
+
         ShortUrl url = ShortUrl.builder()
                 .longUrl(request.longUrl())
-                .createdAt(LocalDateTime.now())
+                .createdAt(now)
+                .expiresAt(now.plusHours(24))
+                .clickCount(0L)
                 .build();
 
-        url = (ShortUrl) repository.save(url);
+        url = repository.save(url);
 
-        // convert ID to Base62
         String shortCode =
                 Base62Encoder.encode(url.getId());
 
@@ -38,13 +43,41 @@ public class UrlService {
 
     public String getLongUrl(String shortCode) {
 
-        try {
-            return repository.findByShortCode(shortCode)
-                    .orElseThrow(() ->
-                            new RuntimeException("URL not found"))
-                    .getLongUrl();
-        } catch (Throwable e) {
-            throw new RuntimeException(e);
+        ShortUrl url = repository.findByShortCode(shortCode)
+                .orElseThrow(() ->
+                        new ShortUrlNotFoundException(
+                                "Short URL not found: " + shortCode
+                        )
+                );
+
+        if (!LocalDateTime.now().isBefore(url.getExpiresAt())) {
+            throw new ShortUrlNotFoundException(
+                    "Short URL has expired: " + shortCode
+            );
         }
+        url.setClickCount(url.getClickCount() + 1);
+
+        repository.save(url);
+
+        return url.getLongUrl();
     }
+
+    public UrlStatsResponse getStats(String shortCode) {
+
+        ShortUrl url = repository.findByShortCode(shortCode)
+                .orElseThrow(() ->
+                        new ShortUrlNotFoundException(
+                                "Short URL not found: " + shortCode
+                        )
+                );
+
+        return new UrlStatsResponse(
+                url.getShortCode(),
+                url.getLongUrl(),
+                url.getCreatedAt(),
+                url.getExpiresAt(),
+                url.getClickCount()
+        );
+    }
+
 }

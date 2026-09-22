@@ -24,4 +24,8 @@ public class ShortUrl {
     private String longUrl;
 
     private LocalDateTime createdAt;
+
+    private LocalDateTime expiresAt;
+
+    private Long clickCount;
 }

@@ -1,136 +1,108 @@
 package com.urlshortener.service;
 
-import com.urlshortener.dto.CachedUrl;
 import com.urlshortener.dto.UrlRequest;
+import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.dto.UrlStatsResponse;
 import com.urlshortener.entity.ShortUrl;
 import com.urlshortener.exception.ShortUrlNotFoundException;
 import com.urlshortener.repository.UrlRepository;
 import com.urlshortener.util.Base62Encoder;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Duration;
+
 import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
 public class UrlService {
 
-    private final UrlRepository repository;
-    private final RedisService redisService;
-    private final ObjectMapper objectMapper;
+    private final UrlRepository urlRepository;
 
+    // =========================
+    // CREATE SHORT URL
+    // =========================
+    public UrlResponse createShortUrl(UrlRequest request) {
 
-    public String createShortUrl(UrlRequest request) {
+        ShortUrl url = new ShortUrl();
 
-        LocalDateTime now = LocalDateTime.now();
+        url.setLongUrl(request.longUrl());
+        url.setCreatedAt(LocalDateTime.now());
+        url.setClickCount(0L);
 
-        ShortUrl url = ShortUrl.builder()
-                .longUrl(request.longUrl())
-                .createdAt(now)
-                .expiresAt(now.plusHours(24))
-                .clickCount(0L)
-                .build();
+        // Save first so PostgreSQL generates the ID
+        url = urlRepository.save(url);
 
-        url = repository.save(url);
-
-        String shortCode =
-                Base62Encoder.encode(url.getId());
+        // Generate Base62 short code
+        String shortCode = Base62Encoder.encode(url.getId());
 
         url.setShortCode(shortCode);
 
-        repository.save(url);
+        // Save the short code
+        urlRepository.save(url);
 
-        return shortCode;
+        return new UrlResponse(
+                "http://localhost:8080/" + shortCode
+        );
     }
 
+    // =========================
+    // GET LONG URL
+    // =========================
+    // Redis caches the result of this method.
+    // IMPORTANT: No click-count logic here.
+    @Cacheable(value = "urls", key = "#shortCode")
     public String getLongUrl(String shortCode) {
 
-        // 1. Check Redis first
-        String cachedValue = redisService.get(shortCode);
+        System.out.println("🔥 REDIS CACHE MISS → Going to PostgreSQL");
 
-        if (cachedValue != null) {
-
-            try {
-                CachedUrl cachedUrl =
-                        objectMapper.readValue(cachedValue, CachedUrl.class);
-
-                // 2. Check whether cached URL has expired
-                if (!LocalDateTime.now().isBefore(cachedUrl.expiresAt())) {
-                    redisService.delete(shortCode);
-
-                    throw new ShortUrlNotFoundException(
-                            "Short URL has expired: " + shortCode
-                    );
-                }
-
-                // 3. Cache HIT
-                ShortUrl url = repository.findByShortCode(shortCode)
-                        .orElseThrow(() ->
-                                new ShortUrlNotFoundException(
-                                        "Short URL not found: " + shortCode
-                                )
-                        );
-
-                url.setClickCount(url.getClickCount() + 1);
-                repository.save(url);
-
-                return cachedUrl.longUrl();
-
-            } catch (JsonProcessingException e) {
-                redisService.delete(shortCode);
-            }
-        }
-
-        // 4. Cache MISS → go to PostgreSQL
-        ShortUrl url = repository.findByShortCode(shortCode)
+        ShortUrl url = urlRepository.findByShortCode(shortCode)
                 .orElseThrow(() ->
                         new ShortUrlNotFoundException(
                                 "Short URL not found: " + shortCode
                         )
                 );
 
-        // 5. Check database expiration
-        if (!LocalDateTime.now().isBefore(url.getExpiresAt())) {
-            throw new ShortUrlNotFoundException(
-                    "Short URL has expired: " + shortCode
-            );
-        }
-
-        // 6. Put URL into Redis
-        try {
-            CachedUrl cachedUrl =
-                    new CachedUrl(
-                            url.getLongUrl(),
-                            url.getExpiresAt()
-                    );
-
-            String json = objectMapper.writeValueAsString(cachedUrl);
-
-            Duration ttl = Duration.between(
-                    LocalDateTime.now(),
-                    url.getExpiresAt()
-            );
-
-            redisService.save(shortCode, json, ttl);
-
-        } catch (JsonProcessingException e) {
-            // Redis caching failure should not break URL redirection
-        }
-
-        // 7. Increment click count in PostgreSQL
-        url.setClickCount(url.getClickCount() + 1);
-        repository.save(url);
-
-        // 8. Redirect using the URL
         return url.getLongUrl();
     }
 
+    // =========================
+    // INCREMENT CLICK COUNT
+    // =========================
+    public void incrementClickCount(String shortCode) {
+
+        ShortUrl url = urlRepository.findByShortCode(shortCode)
+                .orElseThrow(() ->
+                        new ShortUrlNotFoundException(
+                                "Short URL not found: " + shortCode
+                        )
+                );
+
+        Long currentCount = url.getClickCount();
+
+        if (currentCount == null) {
+            currentCount = 0L;
+        }
+
+        url.setClickCount(currentCount + 1);
+
+        urlRepository.save(url);
+
+        System.out.println(
+                "📈 Click count increased for "
+                        + shortCode
+                        + " → "
+                        + url.getClickCount()
+        );
+    }
+
+    // =========================
+    // GET URL STATS
+    // =========================
     public UrlStatsResponse getStats(String shortCode) {
 
-        ShortUrl url = repository.findByShortCode(shortCode)
+        ShortUrl url = urlRepository.findByShortCode(shortCode)
                 .orElseThrow(() ->
                         new ShortUrlNotFoundException(
                                 "Short URL not found: " + shortCode
@@ -146,4 +118,14 @@ public class UrlService {
         );
     }
 
+    // =========================
+    // DELETE / EVICT CACHE
+    // =========================
+    @CacheEvict(value = "urls", key = "#shortCode")
+    public void evictCache(String shortCode) {
+
+        System.out.println(
+                "🗑️ Redis cache evicted for: " + shortCode
+        );
+    }
 }

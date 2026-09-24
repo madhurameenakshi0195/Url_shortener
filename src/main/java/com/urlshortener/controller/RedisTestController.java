@@ -1,32 +1,23 @@
 package com.urlshortener.controller;
 
-import com.urlshortener.service.RedisService;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/redis")
 public class RedisTestController {
 
-    private final RedisService redisService;
+    private final StringRedisTemplate redisTemplate;
 
-    public RedisTestController(RedisService redisService) {
-        this.redisService = redisService;
+    public RedisTestController(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
     }
 
-    @PostMapping("/test")
-    public String saveTestValue() {
-        redisService.save("test-key", "Hello Redis!");
-        return "Saved to Redis";
-    }
+    @GetMapping("/redis-test")
+    public String testRedis() {
 
-    @GetMapping("/test")
-    public String getTestValue() {
-        String value = redisService.get("test-key");
+        redisTemplate.opsForValue().set("test-key", "Redis is working!");
 
-        if (value == null) {
-            return "Value not found";
-        }
-
-        return value;
+        return redisTemplate.opsForValue().get("test-key");
     }
 }

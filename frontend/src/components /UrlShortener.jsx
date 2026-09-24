@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 
 function UrlShortener() {
     const [longUrl, setLongUrl] = useState("");
@@ -6,6 +7,37 @@ function UrlShortener() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [stats, setStats] = useState(null);
+
+
+    useEffect(() => {
+        if (!shortUrl) {
+            return;
+        }
+
+        const shortCode = shortUrl
+            .split("/")
+            .filter(Boolean)
+            .pop();
+
+        const interval = setInterval(async () => {
+            try {
+                const response = await fetch(
+                    `http://localhost:8080/api/urls/${encodeURIComponent(shortCode)}/stats`
+                );
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setStats(data);
+                }
+            } catch (error) {
+                console.error("Could not refresh stats:", error);
+            }
+        }, 2000);
+
+        return () => {
+            clearInterval(interval);
+        };
+    }, [shortUrl]);
 
     const handleShorten = async () => {
         if (!longUrl.trim()) {
@@ -19,6 +51,9 @@ function UrlShortener() {
         setStats(null);
 
         try {
+            // =========================
+            // 1. CREATE SHORT URL
+            // =========================
             const response = await fetch("http://localhost:8080/api/urls", {
                 method: "POST",
                 headers: {
@@ -40,20 +75,54 @@ function UrlShortener() {
 
             const data = await response.json();
 
+            console.log("BACKEND RESPONSE:", data);
+            console.log("SHORT URL:", data.shortUrl);
+
             setShortUrl(data.shortUrl);
 
-            const shortCode = data.shortUrl.split("/").pop();
+            // =========================
+            // 2. EXTRACT SHORT CODE
+            // =========================
+            const shortCode = data.shortUrl
+                .split("/")
+                .filter(Boolean)
+                .pop();
 
-            const statsResponse = await fetch(
-                `http://localhost:8080/api/urls/${shortCode}/stats`
-            );
+            console.log("EXTRACTED SHORT CODE:", shortCode);
 
-            if (statsResponse.ok) {
-                const statsData = await statsResponse.json();
-                setStats(statsData);
+            // Safety check
+            if (!shortCode) {
+                throw new Error("Could not extract short code");
             }
+
+            // =========================
+            // 3. GET STATS
+            // =========================
+            const statsUrl =
+                `http://localhost:8080/api/urls/${encodeURIComponent(shortCode)}/stats`;
+
+            console.log("STATS URL:", statsUrl);
+
+            const statsResponse = await fetch(statsUrl);
+
+            if (!statsResponse.ok) {
+                console.log(
+                    "Stats request failed:",
+                    statsResponse.status
+                );
+
+                return;
+            }
+
+            const statsData = await statsResponse.json();
+
+            console.log("STATS RESPONSE:", statsData);
+
+            setStats(statsData);
+
         } catch (error) {
-            console.error(error);
+            console.error("ERROR:", error);
+
             setError(
                 "Could not shorten the URL. Make sure the backend is running."
             );

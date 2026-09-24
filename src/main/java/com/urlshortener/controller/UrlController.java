@@ -11,26 +11,26 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.net.URI;
-
 @RestController
 @RequiredArgsConstructor
 public class UrlController {
 
     private final UrlService service;
 
+    // =========================
+    // CREATE SHORT URL
+    // =========================
     @PostMapping("/api/urls")
     public UrlResponse create(
             @Valid @RequestBody UrlRequest request
     ) {
 
-        String code = service.createShortUrl(request);
-
-        return new UrlResponse(
-                "http://localhost:8080/" + code
-        );
+        return service.createShortUrl(request);
     }
 
+    // =========================
+    // REDIRECT
+    // =========================
     @GetMapping("/{code}")
     public ResponseEntity<Void> redirect(
             @PathVariable String code
@@ -38,17 +38,23 @@ public class UrlController {
 
         String longUrl = service.getLongUrl(code);
 
+        // Count EVERY click
+        service.incrementClickCount(code);
+
         return ResponseEntity
                 .status(HttpStatus.FOUND)
                 .header(HttpHeaders.LOCATION, longUrl)
                 .build();
     }
 
+    // =========================
+    // GET URL STATS
+    // =========================
     @GetMapping("/api/urls/{code}/stats")
     public UrlStatsResponse stats(
             @PathVariable String code
     ) {
+
         return service.getStats(code);
     }
-
 }
